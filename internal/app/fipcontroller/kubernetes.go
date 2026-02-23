@@ -2,7 +2,9 @@ package fipcontroller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"net"
 	"strings"
@@ -145,6 +147,77 @@ func hasNodeName(nodeNames []string, nodeName string) bool {
 		}
 	}
 	return false
+}
+
+// updateNodeLabels sets <prefix>/<fip-ip>=true on the node that owns each FIP
+// and removes the label from all other nodes.
+// fipOwners maps FIP IP string → Hetzner server name (which matches K8s node name).
+func (controller *Controller) updateNodeLabels(ctx context.Context, fipOwners map[string]string) error {
+	prefix := controller.Configuration.NodeLabelPrefix
+
+	nodes, err := controller.KubernetesClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("could not list nodes: %v", err)
+	}
+
+	// Build reverse map: node name → set of FIP IPs it should own
+	nodeToFIPs := make(map[string]map[string]bool)
+	for fipIP, serverName := range fipOwners {
+		if nodeToFIPs[serverName] == nil {
+			nodeToFIPs[serverName] = make(map[string]bool)
+		}
+		nodeToFIPs[serverName][fipIP] = true
+	}
+
+	for _, node := range nodes.Items {
+		patch := make(map[string]*string)
+		ownedFIPs := nodeToFIPs[node.Name]
+
+		// Add labels for FIPs this node owns
+		for fipIP := range ownedFIPs {
+			labelKey := prefix + "/" + fipIP
+			if node.Labels[labelKey] != "true" {
+				v := "true"
+				patch[labelKey] = &v
+				controller.Logger.Infof("Labeling node %s with %s=true", node.Name, labelKey)
+			}
+		}
+
+		// Remove labels for FIPs this node does NOT own
+		for key := range node.Labels {
+			if !strings.HasPrefix(key, prefix+"/") {
+				continue
+			}
+			fipIP := strings.TrimPrefix(key, prefix+"/")
+			if !ownedFIPs[fipIP] {
+				patch[key] = nil
+				controller.Logger.Infof("Removing label %s from node %s", key, node.Name)
+			}
+		}
+
+		if len(patch) == 0 {
+			continue
+		}
+
+		patchData := map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"labels": patch,
+			},
+		}
+		patchBytes, err := json.Marshal(patchData)
+		if err != nil {
+			return fmt.Errorf("could not marshal patch for node %s: %v", node.Name, err)
+		}
+
+		_, err = controller.KubernetesClient.CoreV1().Nodes().Patch(
+			ctx, node.Name, types.MergePatchType, patchBytes, metav1.PatchOptions{},
+		)
+		if err != nil {
+			return fmt.Errorf("could not patch node %s: %v", node.Name, err)
+		}
+	}
+
+	return nil
 }
 
 func (controller *Controller) createPodLabelSelector(ctx context.Context) (string, error) {

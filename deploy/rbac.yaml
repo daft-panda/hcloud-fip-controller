@@ -18,6 +18,7 @@ rules:
     verbs:
       - get
       - list
+      - patch
   - apiGroups:
       - "coordination.k8s.io"
     resources:

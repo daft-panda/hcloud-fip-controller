@@ -124,6 +124,9 @@ func (controller *Controller) UpdateFloatingIPs(ctx context.Context) error {
 		return fmt.Errorf("Could not get floatingIPs: %v", err)
 	}
 
+	// Track which server owns each FIP (by server name) for node labeling
+	fipOwners := make(map[string]string) // FIP IP string → server name
+
 	for _, floatingIP := range floatingIPs {
 		controller.Logger.Debugf("Checking floating IP: %s", floatingIP.IP.String())
 
@@ -147,9 +150,24 @@ func (controller *Controller) UpdateFloatingIPs(ctx context.Context) error {
 			}
 			// Add placeholder floating ip to server so that findServerWithLowestFIP will always get a correct server
 			server.PublicNet.FloatingIPs = append(server.PublicNet.FloatingIPs, &hcloud.FloatingIP{})
+			fipOwners[floatingIP.IP.String()] = server.Name
+		} else {
+			// FIP is already assigned to a running server — resolve its name
+			for _, s := range runningServers {
+				if s.ID == floatingIP.Server.ID {
+					fipOwners[floatingIP.IP.String()] = s.Name
+					break
+				}
+			}
 		}
-
 	}
+
+	if controller.Configuration.NodeLabelPrefix != "" {
+		if err := controller.updateNodeLabels(ctx, fipOwners); err != nil {
+			controller.Logger.Errorf("Could not update node labels: %v", err)
+		}
+	}
+
 	return nil
 }
 
