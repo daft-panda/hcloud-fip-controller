@@ -18,23 +18,23 @@ import (
 func TestUpdateFloatingIPs(t *testing.T) {
 	faultyServer := 2
 	tests := []struct {
-		name string
+		name      string
 		serverIPs []schema.FloatingIP
-		servers []schema.Server
-		objects []runtime.Object
+		servers   []schema.Server
+		objects   []runtime.Object
 	}{
 		{
 			name: "successful assign",
 			serverIPs: []schema.FloatingIP{
 				{
-					ID: 1,
+					ID:   1,
 					Type: "ipv4",
-					IP: "1.2.3.4",
+					IP:   "1.2.3.4",
 				},
 			},
 			servers: []schema.Server{
 				{
-					ID: 1,
+					ID:   1,
 					Name: "server-1",
 					PublicNet: schema.ServerPublicNet{
 						IPv4: schema.ServerPublicNetIPv4{
@@ -76,7 +76,7 @@ func TestUpdateFloatingIPs(t *testing.T) {
 			},
 			servers: []schema.Server{
 				{
-					ID: 1,
+					ID:   1,
 					Name: "server-1",
 					PublicNet: schema.ServerPublicNet{
 						IPv4: schema.ServerPublicNetIPv4{
@@ -85,7 +85,7 @@ func TestUpdateFloatingIPs(t *testing.T) {
 					},
 				},
 				{
-					ID: 2,
+					ID:   2,
 					Name: "server-2",
 					PublicNet: schema.ServerPublicNet{
 						IPv4: schema.ServerPublicNetIPv4{
@@ -163,7 +163,7 @@ func TestUpdateFloatingIPs(t *testing.T) {
 				w.WriteHeader(201)
 				json.NewEncoder(w).Encode(schema.FloatingIPActionAssignResponse{
 					Action: schema.Action{
-						ID: 1,
+						ID:     1,
 						Status: r.URL.Query().Get(":id"),
 					},
 				})
@@ -177,8 +177,8 @@ func TestUpdateFloatingIPs(t *testing.T) {
 				Backoff: wait.Backoff{
 					Steps: 1,
 				},
-				Configuration:    &configuration.Configuration{},
-				Logger:           logrus.New(),
+				Configuration: &configuration.Configuration{},
+				Logger:        logrus.New(),
 			}
 
 			err := controller.UpdateFloatingIPs(context.Background())

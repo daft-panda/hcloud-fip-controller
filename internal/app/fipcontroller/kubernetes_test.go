@@ -216,7 +216,7 @@ func TestPodLabelSelector(t *testing.T) {
 					},
 				},
 			},
-			resultString: []string{"foo=bar","bar=foo"},
+			resultString: []string{"foo=bar", "bar=foo"},
 		},
 		{
 			name:    "test successful find pod no labels",
